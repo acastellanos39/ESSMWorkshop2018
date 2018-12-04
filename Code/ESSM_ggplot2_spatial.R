@@ -1,0 +1,306 @@
+#packages <- c("raster", "maps", "mapview", "tidyverse", "viridis", "sp", "rasterVis", "sf")
+#lapply(packages, install.packages)
+#lapply(packages, library, character.only = T)
+
+install.packages("raster")
+install.packages("maps")
+install.packages("mapview")
+install.packages("tidyverse")
+install.packages("viridis")
+install.packages("sp")
+install.packages("rasterVis")
+
+library(raster)
+library(maps)
+library(mapview)
+library(tidyverse)
+library(viridis)
+library(sp)
+library(rasterVis)
+
+
+#####VISUALIZATION WITH ggplot2
+#First, let's grab some data that we can explore visually!
+DATA <- read.csv("Ticks.csv", header = T)
+#TICKS!!!
+#This is part of a dataset looking at the association among fire ants, ticks, small mammals, and tick borne diseases
+
+#It is generally always good practice to take a look at your data beforehand to see what you are dealing with (check dimensions, see what the first few rows look like, and check out a summary of the data and what class each column is)
+dim(DATA)
+head(DATA)
+summary(DATA)
+#each row is a mammal that was processed for ticks 
+
+#ggplot2 has two general methods of plotting: qplot and ggplot
+
+plot(DATA$ScientificName, DATA$Weight)
+#This is using the base plot function. It does its job, but its not going to catch the eye.
+
+qplot(data = DATA, x = ScientificName, y = Weight, geom = "boxplot") 
+#qplot is ggplot2's version of a quick plot, hence the name, coding denizens are lazy (see: every package that begins with "r")
+#you specify the data.frame (data = ), the x axis (x = ), the y axis (y = ), and the type of plot you want (geom = )
+#A quick note. ggplot2 only really likes data.frames. Don't give the data argument a matrix and cry when it spits out a totally non nebulous error.
+
+ggplot(data = DATA, aes(x = ScientificName, y = Weight)) + geom_boxplot()
+#Now, I'd like to introduce you to my good frenemy, ggplot
+#The plot that results is the same as from qplot, but the way we got there is different (unless you haven't noticed the aes function in the room)
+#ggplot2::aes tells the plot the aesthetics (x and y axes, color, fill, groups, size, shape, etc.) that are used in other layers. 
+#After that, you add the plot in layers called by a geom_XXXX function
+
+ggplot(data = DATA, aes(x = Treatment, y = Weight, fill = ScientificName)) + geom_boxplot()
+#By just adding a fill aesthetic, we separated out each species' weight by scientific name
+
+ggplot(data = DATA, aes(x = Transect, y = ScientificName, fill = Weight)) + geom_tile(col = "white")
+
+#What else can you do? What mammals did we find?
+BAR <- ggplot(data = DATA, aes(x = Transect, fill = ScientificName)) + geom_bar(col = "black")
+BAR
+#Here, I just wanted to see what mammal species (fill = ScientificName) were found in each transect (x = Transect) and how many
+#I'm sure y'all are absolutely shocked that geom_bar brings up a bar plot
+
+#"But Adrian," you say. "Aren't species names in italics?!" Correct, and ggplot2 fun shouldn't come at the expense of taxonomic correctness.
+
+BAR + theme(legend.text = element_text(face = "italic"))
+#most of the minor changes to a plot, its axes, the legend, etc. are confined to the ggplot2::theme function
+#go look at http://ggplot2.tidyverse.org/reference/theme.html and weep internally at the all of the arguments listed for the function
+#Here, we are concerned with just the legend text (or legend.text if you will). All adjustments to text items are done using the ggplot2::element_text function. (P.S. if seeing text makes you squeamish, substitute element_text with element_blank())
+
+#Alright, I'm going to do something horrible and unleash piping and dplyr
+DATA %>% group_by(Treatment, Date) %>%
+	summarize(n = n()) %>%
+	ggplot(aes(x = Treatment, y = n)) + geom_boxplot()
+#So the pipe symbol (`%>%`) takes whatever the result is from the left and places it as the first argument in the function on the right
+#You can take a look at it bit by bit (after each `%>%`). Overall, it makes the code a lot more readable 
+#summarize(group_by(DATA, Treatment, Date), n = n()) is the other alternative just to get before the ggplot function
+
+#Need another plot example? This time we'll look at a batch of jittered points.
+ggplot(data = DATA, aes(x = ScientificName, y = Weight, fill = Treatment)) + geom_jitter(height = 0, width = 0.25)
+#Oh no! What happened?! 
+#Well, clearly what happened is that you are using the wrong symbol. Obviously. 
+#If you don't want this to happen, you can also change "fill" to "color"
+#There's a bunch of handy images on the ever magical Google image search for "pch r" that show what part of symbol is controlled by color and what part is controlled by fill
+
+#Try below
+ggplot(data = DATA, aes(x = ScientificName, y = Weight, fill = Treatment)) + geom_jitter(height = 0, width = 0.25, pch = 21)
+#You'll notice that I added a few things to the geom_jitter function. I specified no jitter to the height of a point, capped the jitter on the x axis, and changed the symbol of the points using pch
+
+#But now I want to do something slightly more complicated by giving a line showing the mean weight of each group (species in treatment type). To do this, we will use the ggplot2::stat_summary function
+ggplot(data = DATA, aes(x = ScientificName, y = Weight, fill = Treatment)) + geom_jitter(height = 0, width = 0.25, pch = 21) + stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y.., col = Treatment), width = 0.7, size = 0.75)
+#this function will summarize our data and plot it out depending on what we specify in the geom argument (can be a point, errorbar, crossbar, etc.). We want the mean of the y axis (hence the use of the fun.y argument) and only want a simple line, not an entire errorbar. To do this, we set the ymin and ymax to the same value as y (the ..y.. simply refers to the calculated value of y by the function)
+
+#This is the first clear evidence you have seen so far that ggplot2 works as a series of layers (don't beleive me? put stat_summaryin front of geom_jitter)
+
+#Let's take a closer look at some of the theme and scale options with the bar plot from earlier
+COLS <- c("#009E73", "#CC79A7", "#D55E00", "#0072B2", "#F0E442", "#E69F00","#56B4E9") #colorblind friendly palette from http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
+
+BAR + scale_fill_manual(name = "Species", values = COLS)
+#you can specify your own color palette in ggplot2::scale_fill_manual by giving the values argument a vector of colors
+#the name argument also allows you to change the title of the legend
+
+BAR + labs(y = "No. Individuals Caught", title = "Goliad\nMammal Captures")
+#the ggplot2::labs function allows you to change the x and y axis titles and the main title
+#the use of \n in a string tells ggplot2 to make a hard return
+
+BAR + scale_x_discrete(limits = c("T1", "UT1", "T2", "UT2"), labels = c("Treated 1", "Untreated 1", "Treated 2", "Untreated 2")) + scale_y_continuous(breaks = seq(0, 200, 15))
+#the scale functions are useful for modifying the scale however you want. They follow the pattern of scale_"axis in question"_"type of data"
+#Our x axis has discrete data (factors relating to each transect) while our y axis is continuous (number of captures)
+#you can use the limits argument to reorder things and the labels argument to rename them
+BAR
+#you can see that I changed the axis marks to be every 15 using the breaks argument 
+
+BAR + theme(legend.position = "bottom")
+
+BAR + theme(legend.position = c(0.8, 0.75), legend.background = element_blank())
+#you can also specify coordinates (x, y) to tell the legend where to be
+
+BAR + theme(panel.background = element_rect(fill = "white"), panel.grid = element_line(color = "grey70"))
+#But what if you don't like that traditional gray panel background (there are OPINIONS about it)? 
+#You can change it by giving it the element_rect function and telling it to change the fill (or by giving it element_blank())
+#You can also change the color of the grid lines by specifying a color argument in element_line
+
+#Do you hate Adobe Illustrator or similar programs for making figures because you forget everything each time you make a figure?
+#Let's see how to combine plots because hopefully things havent gone off the rails by now
+library(cowplot)
+BAR 
+#See what I mean by people having OPINIONS on how everything should look
+
+BAR <- BAR + scale_y_continuous(expand = c(0, 0)) #this has been bothering me while writing all of this, so I'm finally fixing it (got rid of the space between the x axis and 0)
+
+SPEC <- c("B. taylori", "C. hispidus", "C. parva", "P. merriami", "P. leucopus", "R. fulvescens", "S. hispidus")
+PLT <- ggplot(data = DATA, aes(x = ScientificName, y = Weight, fill = Treatment)) + geom_jitter(height = 0, width = 0.25, pch = 21) + stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y.., col = Treatment), width = 0.7, size = 0.75) + scale_x_discrete(labels = SPEC) + theme(axis.text.x = element_text(size = 10, angle = 75, vjust = 0.5))
+#let's add in our second plot
+
+plot_grid(BAR, PLT, labels = c("A", "B"), align = "h")
+#the cowplot::plot_grid function will put your multiple plot objects in the same plot and can label them with the labels argument
+
+ggsave("HorribleAwfulPlot.pdf")
+#by default, ggplot2::ggsave saves the most recent plot you brought up (you can also give it a plot object in the plot argument) at the dimensions that it occurs. You can adjust dpi, width, and height in here as well if need be.
+?ggsave
+#No, for real. The help pages in R are invaluable. Most questions that people ask me are either solvable by taking the time to read the function help page or googling an error code (or things being the wrong class)
+
+#####INTRODUCTION TO SPATIAL DATA
+###package::sp 
+#We will be introducing three types of data today, how they differ, and how to manipulate and visualize them. 
+
+###POINT DATA
+
+BRTC <- read.csv("BRTCMammals.csv", header = T) 
+#these data are records from the Biodiversity Research and Teach Collection's mammal collection here at TAMU gathered from GBIF 
+dim(BRTC)
+summary(BRTC)
+#as those who can read mammal/GBIF nonsense can tell, it's basically a bunch of rodents and bats
+
+BRTC %>% filter(stateProvince == "Texas") %$%
+	 county %>% 
+	 unique %>% 
+	 length
+#I wanted to see how many counties in Texas are represented by specimens in the BRTC
+#Using a pipeline (*hissing from back of the room at the sight of %>%*) is easier to read than length(unique(BRTC[BRTC$stateProvince %in% "Texas", "county"])) by breaking it down into steps and allowing you to read from left to right
+#you may have also noticed the `%$%` symbol which is used to index similar to how BRTC$county would be
+
+#But we want it in an easy spatial representation
+TEX <- BRTC %>% filter(stateProvince == "Texas" & !is.na(decimalLongitude))
+#let's just grab the Texas specimens to work with (we all know they're better than the other specimens anyway)
+#Additionally, the sp package really dislikes NA values (which we have a ton of unfortunately), so let's get rid of those too
+TEX <- SpatialPointsDataFrame(coords = TEX[, 13:14], data = TEX, proj4string = crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+#The sp::SpatialPointsDataFrame requires coordinates (decimalLongitude and decimalLatitude), data to be placed in the "DataFrame" portion of the object (TEX), and a coordinate reference system (all points from GBIF are WGS84)
+
+#Spatial objects from sp have a few different pieces to them that you can query via @ (this is an S4 object rather than an S3, so the usual $ doesn't work at these upper levels)
+#a few options are TEX@bbox (min-max coords), TEX@proj4string (CRS nonsense), TEX@coords (coordinates for each point), TEX@data (all of the rest of the data)
+
+head(TEX)
+summary(TEX)
+#as you can see, it acts pretty much like a regular data.frame would except for being high maintenance when you want something particular from it
+
+#The good thing about these spatial classes is that they are easier to plot
+plot(TEX)
+#Well...looks like there are some points that aren't georeferenced correctly. Let's toss those out.
+
+###POLYGONS
+#To do so, let's introduce polygons in R
+CNTY <- raster::getData(country = "USA", level = 2) %>% .[.$NAME_1 %in% "Texas", ]
+#raster::getData is a great resource for easy to access administrative polygons. Here we grab county polygons for the entire United States and then whittle that down to only the Texas counties
+#within the piping ecosystem, the "." symbol represents the entire object resulting from the left, allowing us to index it like normal but without typing out CNTY
+
+CNTY
+#254 features (the number of counties in the glorious Republic of Texas)
+class(CNTY)
+#The SpatialPolygonsDataFrame unsurprisingly behaves very similarly to the SpatialPointsDataFrame
+#don't run attributes on this unless you want to scroll around a bunch
+#the different slots that can be accessed by @ are data, polygons, plotOrder, bbox, and proj4string (I used the attributes function and scrolled for your sins)
+
+#But where were we?
+
+OVER <- over(TEX, CNTY)
+head(OVER, 20)
+#sp::over is a wonderful function that checks for records/attributes that are overlayed in both spatial objects you give it
+#it is a good way of grabbing only those data that exist in the geographic space of another object (e.g., you don't want disgusting marine mammals ruining your Texas mammal dataset)
+#*Starship Troopers voice* "Would you like to know more?" there are vignettes on the sp::over function if you yearn for knowledge/are afflicted by insomnia
+
+TEX <- TEX[-which(is.na(OVER[, 1])), ]
+#grabs only those points that are actually within Texas
+
+#But did it work?
+plot(TEX) + maps::map(add = T, database = "county", "texas")
+#Yes! (Hopefully it works for you as well, if not ¯\_(ツ)_/¯)
+#the maps::map function can add quick boundaries, the default setting is set to "world" but it can be switched to "state" or "county"
+
+#ggplot2 again!
+ggplot() + geom_point(data = as.data.frame(TEX), aes(x = decimalLongitude, y = decimalLatitude), col = "#880000")
+#gasp, colored points
+#gasp, geom_point creates points
+#You'll notice that we changed TEX back into a data.frame (because ggplot2 is high maintenance)
+
+#Points were cool, but 
+MAP <- ggplot() + geom_polygon(data = CNTY, aes(x = long, y = lat, group = group), fill = NA, col = "grey20") + geom_point(data = as.data.frame(TEX), aes(x = decimalLongitude, y = decimalLatitude, col = "#880000"), pch = 19, alpha = 0.5)
+MAP
+#now let's use the ggplot2::geom_polygon function to add the polygon data
+#Briefly, all SpatialPolygonDataFrame objects require an x of long, y of lat, and group of group
+#I gave it no fill (via NA) and a dark grey border (take note that the border doesn't show up in the legend because it is outside of the aes function)
+
+#that legend doesn't say very much
+MAP + scale_color_manual(name = "Legend", values = "#880000", labels = "Occurences") + theme(legend.position = c(0.2, 0.2), legend.background = element_blank())
+#When you are using the color (or fill, shape, size, etc.) aesthetic, you can change the legend using the scale_color_manual (or switch color for what you are interested in)
+#name changes the title, labels changes the legend labels, and values changes the actual color
+
+#What if we wanted to see what counties aren't represented by georeferenced BRTC specimens?
+#What if we wanted to plot TWO polygons?
+NORE <- CNTY@data %$% NAME_2 %>% setdiff(unique(TEX$county))
+#uses a pipeline to grab the county name (NAME_2) from the CNTY polygons and then checks for differences between the list of counties and those in our points dataset
+NORE <- CNTY[CNTY$NAME_2 %in% NORE, ]
+#grabs only those counties that aren't found in the points dataset
+
+NORE
+plot(NORE)
+
+MAP + geom_polygon(data = NORE, aes(x = long, y = lat, group = group), fill = "gray50", col = "gray20")
+#ggplot2 acts as a series of layers, so the missing county layer goes on top
+#if you want it below everything, put it further upstream in the ggplot2 code
+
+###RASTER
+#Now we are going to move to the raster package to deal with raster data
+ELEV <- raster::getData(name = "alt", country = "USA")[[1]]
+#We are using our good friend the raster::getData function to grab some elevation data for the US (the [[1]] is there because the result without it is a list of 4 RasterLayers and we only want what applies to the continental US)
+
+ELEV
+#You can see that it is a RasterLayer with a ton of cells. You can also see the resolution, extent, crs, and min/max values for the elevation
+
+plot(ELEV) #Yep, thats the continental US (and the Rocky Mountains!)
+
+#What can you do with rasters?
+raster::extract(ELEV, TEX@coords)
+#As you can see, we used the raster::extract function to grab the elevation of the cell that each specimen matches to. Neat!
+
+#You can crop the raster to a certain geographic extent
+EXT <- extent(CNTY)
+EXT
+#Here, we just grabbed the geographic extent of the CNTY polygons using the raster::extent function (which basically just puts the CNTY@bbox info in a different object class)
+#this isn't really needed, but it can be a useful function for defining a study area
+
+plot(crop(ELEV, EXT))
+quartz()
+plot(crop(ELEV, CNTY))
+#both return the same result (the lack of Texas elevation)
+#Butwhy.gif
+
+?crop #mentions that the y argument is an Extent object or something that can be used to create one
+#This is your other reminder that the help pages, their description of the arguments, and the examples at the bottom are EXTREMELY useful. Please read them.
+
+#You can also clip the raster to a polygon, but this can take a *bit* more time
+
+#run the below line and then stretch or sit quietly, paralyzed by existential dread
+ELEV <- mask(crop(ELEV, CNTY), CNTY)
+
+plot(ELEV)
+#I know y'all missed Texas, so I brought it back
+
+#Now base plot is nice, but how do you plot rasters in ggplot2?
+#the answer is a combination of rasterVis::gplot and geom_tile
+#rasterVis::gplot (not ggplot) is a wrapper of ggplot that allows Raster objects to be used
+
+gplot(ELEV) + geom_tile(aes(fill = value)) 
+#As you can see, it filled the plot in according to the value 
+#Don't like blue?
+
+RAS <- gplot(ELEV) + geom_tile(aes(fill = value)) + scale_fill_viridis(option = "D", name = "Elevation (m)", na.value = "grey95") 
+RAS
+#Well, isn't that nice
+#The viridis package makes the viridis color scheme usable in R by scale_XXX_viridis
+#You may have noticed the option argument in scale_fill_viridis. Check out what happens if you change it to "A", "B", or "C"
+
+#Let's add some polygons (and someone asked for contours, so let's add that in too)
+RAS + geom_polygon(data = CNTY, aes(x = long, y = lat, group = group), fill = NA, col = "grey20") + geom_contour(aes(z = value), binwidth = 200, col = "white", alpha = 0.6) 
+
+#There you go. An elevation map of Texas counties with contour lines for every 200m increase in elevation.
+
+mapview(TEX)
+
+mapview(CNTY)
+
+mapview(ELEV)
+
+
+DATA %>% group_by(Transect, ScientificName) %>%
+	 summarize(n = n()) %>%
+	 ggplot(aes(x = Transect, y = ScientificName)) + geom_tile(aes(fill = n), col = "white") + scale_fill_viridis()
